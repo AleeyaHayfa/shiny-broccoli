@@ -50,9 +50,9 @@ with st.sidebar:
 
 # Display User Input
 with st.expander('Input features'):
-    st.write('*Client details*')
+    st.write("*Client's details*")
     st.write(input_df)
-    st.write('*Combined Housing data*')
+    st.write("*Combined Housing data (Client's details with original dataset)*")
     st.write(input_details)
 
 # Encode X
