@@ -50,7 +50,7 @@ with st.sidebar:
 
 # Display User Input
 with st.expander('Input features'):
-    st.write('*Input User*')
+    st.write('*Client's info*')
     st.write(input_df)
     st.write('*Combined Housing data*')
     st.write(input_details)
