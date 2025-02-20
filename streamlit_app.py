@@ -5,9 +5,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-st.title('🤖 ThinkTankers ML App')
+st.title('🏡 Homelessness Risk Prediction App')
 
-st.write('This app builds a machine learning model')
+st.write('Predict the risk of homelessness based on housing registration data using machine learning.')
 
 # Load Data
 with st.expander('Data'):
