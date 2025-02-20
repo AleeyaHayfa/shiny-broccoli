@@ -30,7 +30,7 @@ with st.expander('Data Visualization'):
 
 # User Input
 with st.sidebar:
-    st.header('Input features')
+    st.header('Enter Client Details')
     Family = st.selectbox('Family Type', (
         'Single Person', 'Single Parent, 1 Child', 'Single Parent, 2 Children', 
         'Single Parent, >2 Children', 'Couple Only', 'Couple, 1 Child', 
