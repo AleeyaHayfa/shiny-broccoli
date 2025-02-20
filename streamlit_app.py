@@ -39,7 +39,7 @@ with st.sidebar:
     ))
     DisabilityFlag = st.selectbox('Disability', ('Yes', 'No'))
     TotalPeople = st.slider('Total People on application', 1, 12, 2)
-    TotalMonths = st.slider('Total months you have been registered', 0, 239, 23)
+    TotalMonths = st.slider('Total months client have been registered', 0, 239, 23)
 
     data = {'FamilyType': Family,
             'MonthsonHousingRegister': TotalMonths,
