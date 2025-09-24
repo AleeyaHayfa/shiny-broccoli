@@ -1,227 +1,110 @@
+import pandas as pd
+import numpy as np
 import streamlit as st
-import base64
-import requests
-import mysql.connector
-import json
-from datetime import datetime
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-# Streamlit app title
-st.title("Receipt Extractor")
+st.title(':house_with_garden: Homelessness Risk Prediction App')
 
-# OpenAI API Key
-api_key = "Your Password"
+st.write('Predict the risk of homelessness based on housing registration data using machine learning.')
 
-# Database connection parameters
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'Your Password',
-    'database': 'receipts'
-}
+# Load Data
+with st.expander('Data'):
+    df = pd.read_csv("https://raw.githubusercontent.com/AleeyaHayfa/shiny-broccoli/refs/heads/master/Social_Housing_cleaned.csv")
+    st.write('Dataset:')
+    st.dataframe(df)
 
-var_for = """Given the receipt image provided, extract all relevant information and structure the output as detailed JSON that matches the database schema for storing receipt headers and line items. The receipt headers should include store name, slogan, address, store manager, phone number, transaction ID, date, time, cashier, subtotal, sales tax, total, gift card, charged amount, card type, authorization code, chip read, AID, issuer, policy ID, expiration date, survey message, survey website, user ID, password, and eligibility note. The line items should include SKU, description, details, and price for each item on the receipt. Exclude any sensitive information from the output. Format the JSON as follows:
+    x_raw = df.drop('AtRiskOfOrExperiencingHomelessnessFlag', axis=1)
+    y_raw = df['AtRiskOfOrExperiencingHomelessnessFlag']
 
-{
-  "receipt_headers": {
-    "store_name": "",
-    "slogan": "",
-    "address": "",
-    "store_manager": "",
-    "phone_number": "",
-    "transaction_id": "",
-    "date": "",
-    "time": "",
-    "cashier": "",
-    "subtotal": 0,
-    "sales_tax": 0,
-    "total": 0,
-    "gift_card": 0,
-    "charged_amount": 0,
-    "card_type": "",
-    "auth_code": "",
-    "chip_read": "",
-    "aid": "",
-    "issuer": "",
-    "policy_id": "",
-    "expiration_date": "",
-    "survey_message": "",
-    "survey_website": "",
-    "user_id": "",
-    "password": "",
-    "eligibility_note": ""
-  },
-  "line_items": [
-    {
-      "sku": "",
-      "description": "",
-      "details": "",
-      "price": 0
-    }
-  ]
-}"""
+    st.write('*X (Features)*')
+    st.dataframe(x_raw)
 
-# Function to encode the image
-def encode_image(image):
-    return base64.b64encode(image.read()).decode('utf-8')
+    st.write('*Y (Target)*')
+    st.write(y_raw)
 
-# Function to process the uploaded image and update the database
-def process_image(image):
-    base64_image = encode_image(image)
+# Data Visualization
+with st.expander('Data Visualization'):
+    st.scatter_chart(data=df, x='PeopleonApplication', y='FamilyType', color='AtRiskOfOrExperiencingHomelessnessFlag')
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
+# User Input
+with st.sidebar:
+    st.header('Enter Client Details')
+    Family = st.selectbox('Family Type', (
+        'Single Person', 'Single Parent, 1 Child', 'Single Parent, 2 Children', 
+        'Single Parent, >2 Children', 'Couple Only', 'Couple, 1 Child', 
+        'Couple, 2 Children', 'Couple, >2 Children', 'Single Person Over 55', 
+        'Couple Only Over 55', 'Other'
+    ))
+    DisabilityFlag = st.selectbox('Disability', ('Yes', 'No'))
+    TotalPeople = st.slider('Total People on application', 1, 12, 2)
+    TotalMonths = st.slider('Total months client have been registered', 0, 239, 23)
 
-    payload = {
-        "model": "gpt-4-vision-preview",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": var_for
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 2048
-    }
+    data = {'FamilyType': Family,
+            'MonthsonHousingRegister': TotalMonths,
+            'DisabilityApplicationFlag': DisabilityFlag,
+            'PeopleonApplication': TotalPeople}
+    input_df = pd.DataFrame(data, index=[0])
+    input_details = pd.concat([input_df, x_raw], axis=0)
 
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    response_json = response.json()
-    receipt_data_str = response_json['choices'][0]['message']['content']
+# Display User Input
+with st.expander('Input features'):
+    st.write("*Client's details*")
+    st.write(input_df)
+    st.write("*Combined Housing data (Client's details with original dataset)*")
+    st.write(input_details)
 
-    # Find the JSON string within the extracted content
-    receipt_data_json_str = receipt_data_str.split('```json')[1].split('```')[0].strip()
-    receipt_data = json.loads(receipt_data_json_str)
+# Encode X
+encode = ['FamilyType', 'DisabilityApplicationFlag']
+df_house = pd.get_dummies(input_details, prefix=encode)
+x = df_house[1:]
+input_row = df_house[:1]
 
-    # Connect to the database
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
+# Encode y
+target_mapper = {'Yes': 1, 'No': 0}
+y = y_raw.apply(lambda val: target_mapper[val])
 
-    # Insert into receipt_headers
-    header_insert_query = """
-    INSERT INTO receipt_headers (store_name, slogan, address, store_manager, phone_number, transaction_id, date, time, cashier, subtotal, sales_tax, total, gift_card, charged_amount, card_type, auth_code, chip_read, aid, issuer, policy_id, expiration_date, survey_message, survey_website, user_id, password, eligibility_note)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
+with st.expander('Data preparation'):
+    st.write('*Encoded X (input housing)*')
+    st.write(input_row)
+    st.write('*Encoded y*')
+    st.write(y)
 
-    header_info = receipt_data['receipt_headers']
-    line_items = receipt_data['line_items']
+# Train-Test Split
+X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
-    # Format date, time, and expiration_date
-    formatted_date = datetime.strptime(header_info['date'], '%m/%d/%y').strftime('%Y-%m-%d')
-    formatted_time = datetime.strptime(header_info['time'], '%I:%M %p').strftime('%H:%M:%S')
-    formatted_expiration_date = datetime.strptime(header_info['expiration_date'], '%m/%d/%Y').strftime('%Y-%m-%d')
+# Train Model
+clf = RandomForestClassifier(random_state=42)
+clf.fit(X_train, y_train)
 
-    # Prepare header values
-    header_values = (
-        header_info['store_name'],
-        header_info['slogan'],
-        header_info['address'],
-        header_info['store_manager'],
-        header_info['phone_number'],
-        header_info['transaction_id'],
-        formatted_date,
-        formatted_time,
-        header_info['cashier'],
-        header_info['subtotal'],
-        header_info['sales_tax'],
-        header_info['total'],
-        header_info['gift_card'],
-        header_info['charged_amount'],
-        header_info['card_type'],
-        header_info['auth_code'],
-        header_info['chip_read'],
-        header_info['aid'],
-        header_info['issuer'],
-        header_info['policy_id'],
-        formatted_expiration_date,
-        header_info['survey_message'],
-        header_info['survey_website'],
-        header_info['user_id'],
-        header_info['password'],
-        header_info['eligibility_note']
-    )
+# Predict on Test Data
+y_pred = clf.predict(X_test)
 
-    # Insert header values
-    cursor.execute(header_insert_query, header_values)
-    receipt_id = cursor.lastrowid
+# Evaluate Model
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
 
-    # Prepare and insert line items
-    line_item_insert_query = """
-    INSERT INTO line_items (receipt_id, sku, description, details, price)
-    VALUES (%s, %s, %s, %s, %s)
-    """
+# Display Model Performance
+with st.expander('Model Performance'):
+    st.write(f'**Accuracy:** {accuracy:.2f}')
+    st.write(f'**Precision:** {precision:.2f}')
+    st.write(f'**Recall:** {recall:.2f}')
+    st.write(f'**F1 Score:** {f1:.2f}')
 
-    for item in line_items:
-        price = float(item['price'])
-        line_item_values = (
-            receipt_id,
-            item['sku'],
-            item['description'],
-            item.get('details', ''),
-            price
-        )
+# Predict User Input
+prediction = clf.predict(input_row)
+prediction_proba = clf.predict_proba(input_row)
 
-        cursor.execute(line_item_insert_query, line_item_values)
+# Display Prediction
+df_prediction_proba = pd.DataFrame(prediction_proba, columns=['No', 'Yes'])
+st.subheader('Predicted Homelessness')
+st.dataframe(df_prediction_proba, column_config={
+    'Yes': st.column_config.ProgressColumn('Yes', format='%.2f', width='medium', min_value=0, max_value=1),
+    'No': st.column_config.ProgressColumn('No', format='%.2f', width='medium', min_value=0, max_value=1)
+}, hide_index=True)
 
-    # Commit and close the connection
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    return receipt_data
-
-# Streamlit tabs
-tab1, tab2 = st.tabs(["Upload Receipt", "Display the Data"])
-
-with tab1:
-    st.header("Upload Receipt")
-    uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
-
-    if uploaded_file is not None:
-        # Display the uploaded image
-        st.image(uploaded_file, caption='Uploaded Receipt', use_column_width=True)
-
-        # Process the uploaded image
-        receipt_data = process_image(uploaded_file)
-
-        # Display success message
-        st.success("Message received successfully from the LLM.")
-
-        # Display the JSON output
-        st.json(receipt_data)
-
-
-with tab2:
-    st.header("Display the Data")
-
-    # Connect to the database
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-
-    # Fetch all records from the receipt_headers table, excluding the time column
-    cursor.execute("SELECT store_name, slogan, address, store_manager, phone_number, transaction_id, date, cashier, subtotal, sales_tax, total, gift_card, charged_amount, card_type, auth_code, chip_read, aid, issuer, policy_id, expiration_date, survey_message, survey_website, user_id, password, eligibility_note FROM receipt_headers;")
-    headers = cursor.fetchall()
-
-    # Display the headers in a table
-    st.subheader("Receipt Headers")
-    st.table(headers)
-
-    # Fetch and display all records from the line_items table
-    st.subheader("Line Items")
-    cursor.execute("SELECT * FROM line_items;")
-    items = cursor.fetchall()
-    st.table(items)
-
-    # Close the cursor and the connection
-    cursor.close()
-    conn.close()
+housing_homeless = np.array(['No', 'Yes'])
+st.success(str(housing_homeless[prediction][0]))
